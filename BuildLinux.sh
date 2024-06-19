@@ -39,6 +39,63 @@ function usage() {
     echo "   and then './BuildLinux.sh -dsi'"
 }
 
+
+function build_deps() {
+    echo "Configuring dependencies..."
+    type=$1
+    BUILD_ARGS="-DDEP_WX_GTK3=ON"
+    if [[ -n "${type}" ]]
+    then
+        BUILD_ARGS="${BUILD_ARGS} -DCMAKE_BUILD_TYPE=Debug"
+    else
+        BUILD_ARGS="${BUILD_ARGS} -DCMAKE_BUILD_TYPE=RelWithDebInfo"
+    fi
+
+    echo "cmake -S ${ROOT}/deps -B ${ROOT}/deps/build -DDESTDIR="${ROOT}/deps/destdir" ${BUILD_ARGS}"
+    cmake -S ${ROOT}/deps -B ${ROOT}/deps/build -DDESTDIR="${ROOT}/deps/destdir" ${BUILD_ARGS}
+    cmake --build ${ROOT}/deps/build
+}
+
+function build_application() {
+    BUILD_ARGS=""
+    if [[ -n "${FOUND_GTK3_DEV}" ]]
+    then
+        BUILD_ARGS="-DSLIC3R_GTK=3"
+    fi
+    if [[ -n "${BUILD_DEBUG}" ]]
+    then
+        BUILD_ARGS="${BUILD_ARGS} -DCMAKE_BUILD_TYPE=Debug -DBBL_INTERNAL_TESTING=1"
+    else
+        BUILD_ARGS="${BUILD_ARGS} -DBBL_RELEASE_TO_PUBLIC=1 -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBBL_INTERNAL_TESTING=0"
+    fi
+    echo -e "cmake -S ${ROOT} -B ${ROOT}/build -DCMAKE_PREFIX_PATH="${ROOT}/deps/destdir/usr/local" -DSLIC3R_STATIC=1 ${BUILD_ARGS}"
+    cmake -S ${ROOT} -B ${ROOT}/build \
+        -DCMAKE_PREFIX_PATH="${ROOT}/deps/destdir/usr/local" \
+        -DSLIC3R_STATIC=1 \
+        -DORCA_TOOLS=ON \
+        ${BUILD_ARGS}
+    echo "done"
+    echo "Building OrcaSlicer ..."
+    cmake --build build --target OrcaSlicer -j`cat /proc/cpuinfo |grep processor|wc -l`
+    echo "Building OrcaSlicer_profile_validator .."
+    cmake --build build --target OrcaSlicer_profile_validator -j`cat /proc/cpuinfo |grep processor|wc -l`
+    /bin/bash ${ROOT}/run_gettext.sh
+}
+
+function build_image(){
+    echo "[9/9] Generating Linux app..."
+    image=$1
+        pushd build
+            if [[ -n "${image}" ]]
+            then
+                /bin/bash ${ROOT}/build/src/BuildLinuxImage.sh -i
+            else
+                /bin/bash ${ROOT}/build/src/BuildLinuxImage.sh
+            fi
+        popd
+    echo "done"
+}
+
 unset name
 while getopts ":1bcdghirsu" opt; do
   case ${opt} in
@@ -115,27 +172,12 @@ fi
 if [[ -n "${BUILD_DEPS}" ]]
 then
     echo "Configuring dependencies..."
-    BUILD_ARGS="-DDEP_WX_GTK3=ON"
     if [[ -n "${CLEAN_BUILD}" ]]
     then
-        rm -fr deps/build
+        rm -fr ${ROOT}/deps/build
     fi
-    if [ ! -d "deps/build" ]
-    then
-        mkdir deps/build
-    fi
-    if [[ -n "${BUILD_DEBUG}" ]]
-    then
-        # have to build deps with debug & release or the cmake won't find everything it needs
-        mkdir deps/build/release
-        cmake -S deps -B deps/build/release -G Ninja -DDESTDIR="../destdir" ${BUILD_ARGS}
-        cmake --build deps/build/release
-        BUILD_ARGS="${BUILD_ARGS} -DCMAKE_BUILD_TYPE=Debug"
-    fi
-
-    echo "cmake -S deps -B deps/build -G Ninja ${BUILD_ARGS}"
-    cmake -S deps -B deps/build -G Ninja ${BUILD_ARGS}
-    cmake --build deps/build
+    build_deps ${BUILD_DEBUG}
+    echo "done"
 fi
 
 
@@ -144,46 +186,13 @@ then
     echo "Configuring OrcaSlicer..."
     if [[ -n "${CLEAN_BUILD}" ]]
     then
-        rm -fr build
+        rm -fr ${ROOT}/build
     fi
-    BUILD_ARGS=""
-    if [[ -n "${FOUND_GTK3_DEV}" ]]
-    then
-        BUILD_ARGS="-DSLIC3R_GTK=3"
-    fi
-    if [[ -n "${BUILD_DEBUG}" ]]
-    then
-        BUILD_ARGS="${BUILD_ARGS} -DCMAKE_BUILD_TYPE=Debug -DBBL_INTERNAL_TESTING=1"
-    else
-        BUILD_ARGS="${BUILD_ARGS} -DBBL_RELEASE_TO_PUBLIC=1 -DBBL_INTERNAL_TESTING=0"
-    fi
-    echo -e "cmake -S . -B build -G Ninja -DCMAKE_PREFIX_PATH="${PWD}/deps/build/destdir/usr/local" -DSLIC3R_STATIC=1 ${BUILD_ARGS}"
-    cmake -S . -B build -G Ninja \
-        -DCMAKE_PREFIX_PATH="${PWD}/deps/build/destdir/usr/local" \
-        -DSLIC3R_STATIC=1 \
-        -DORCA_TOOLS=ON \
-        ${BUILD_ARGS}
-    echo "done"
-    echo "Building OrcaSlicer ..."
-    cmake --build build --target OrcaSlicer
-    echo "Building OrcaSlicer_profile_validator .."
-    cmake --build build --target OrcaSlicer_profile_validator
-    ./run_gettext.sh
+    build_application ${BUILD_DEBUG}
     echo "done"
 fi
 
 if [[ -e ${ROOT}/build/src/BuildLinuxImage.sh ]]; then
-# Give proper permissions to script
-chmod 755 ${ROOT}/build/src/BuildLinuxImage.sh
-
-echo "[9/9] Generating Linux app..."
-    pushd build
-        if [[ -n "${BUILD_IMAGE}" ]]
-        then
-            ${ROOT}/build/src/BuildLinuxImage.sh -i
-        else
-            ${ROOT}/build/src/BuildLinuxImage.sh
-        fi
-    popd
-echo "done"
+    build_image ${BUILD_IMAGE}
+    echo "done"
 fi

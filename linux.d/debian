@@ -21,7 +21,6 @@ REQUIRED_DEV_PACKAGES=(
     libtool
     libudev-dev
     libwebkit2gtk-4.0-dev
-    ninja-build
     texinfo
     wget
 )
