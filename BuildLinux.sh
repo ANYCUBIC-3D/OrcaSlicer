@@ -62,8 +62,10 @@ function build_application() {
     then
         BUILD_ARGS="-DSLIC3R_GTK=3"
     fi
+    BuildConfig="RelWithDebInfo"
     if [[ -n "${BUILD_DEBUG}" ]]
     then
+        BuildConfig="Debug"
         BUILD_ARGS="${BUILD_ARGS} -DCMAKE_BUILD_TYPE=Debug -DBBL_INTERNAL_TESTING=1"
     else
         BUILD_ARGS="${BUILD_ARGS} -DBBL_RELEASE_TO_PUBLIC=1 -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBBL_INTERNAL_TESTING=0"
@@ -76,9 +78,8 @@ function build_application() {
         ${BUILD_ARGS}
     echo "done"
     echo "Building OrcaSlicer ..."
-    cmake --build build --target OrcaSlicer -j`cat /proc/cpuinfo |grep processor|wc -l`
-    echo "Building OrcaSlicer_profile_validator .."
-    cmake --build build --target OrcaSlicer_profile_validator -j`cat /proc/cpuinfo |grep processor|wc -l`
+    echo "cmake --build build --config ${BuildConfig} -j`cat /proc/cpuinfo |grep processor|wc -l`"
+    cmake --build build --config ${BuildConfig} -j`cat /proc/cpuinfo |grep processor|wc -l`
     /bin/bash ${ROOT}/run_gettext.sh
 }
 
@@ -137,7 +138,7 @@ fi
 
 DISTRIBUTION=$(awk -F= '/^ID=/ {print $2}' /etc/os-release)
 # treat ubuntu as debian
-if [ "${DISTRIBUTION}" == "ubuntu" ]
+if [ "${DISTRIBUTION}" == "ubuntu"  -o "${DISTRIBUTION}" == "Deepin" ]
 then
     DISTRIBUTION="debian"
 fi
